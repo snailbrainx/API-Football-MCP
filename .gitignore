@@ -1,0 +1,19 @@
+# Environment variables (contains API keys)
+.env
+
+# Local settings
+.claude/
+CLAUDE.md
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store

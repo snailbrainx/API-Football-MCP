@@ -1,0 +1,8 @@
+services:
+  api-football-mcp:
+    build: .
+    ports:
+      - "8111:8111"
+    env_file:
+      - .env
+    restart: unless-stopped
