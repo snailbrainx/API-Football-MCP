@@ -33,7 +33,7 @@ from tools.trophies import get_trophies
 from tools.sidelined import get_sidelined
 from tools.injuries import get_injuries
 from tools.predictions import get_predictions
-from tools.odds import get_bookmakers, get_bet_types
+from tools.odds import get_bet_types
 
 
 # --- Search / Name Resolution ---
@@ -280,13 +280,6 @@ async def test_live_predictions():
 
 
 # --- Odds ---
-
-@pytest.mark.asyncio
-async def test_live_bookmakers():
-    result = await get_bookmakers()
-    assert result["success"] is True
-    assert result["results"] > 0
-
 
 @pytest.mark.asyncio
 async def test_live_bet_types():

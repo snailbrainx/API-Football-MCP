@@ -1,12 +1,111 @@
-"""Odds tools: pre-match odds, live odds, bookmakers, bet types, mapping."""
+"""Odds tools: pre-match odds, live odds, bookmakers, bet types, mapping.
+
+Odds responses from the API are very large (1MB+ per fixture unfiltered).
+The tools here simplify and flatten responses to keep them manageable.
+Always use the 'bet' parameter to filter by bet type when possible.
+"""
 
 from __future__ import annotations
 
-from api_client import api_request
+from api_client import api_request, require_at_least_one, _error_response
 
 import sys
 sys.path.insert(0, ".")
 from server import mcp
+
+
+def _simplify_odds(result: dict) -> dict:
+    """Flatten and simplify odds response to reduce size.
+
+    Transforms the deeply nested API response into a compact format:
+    - Strips league logos, country flags, and redundant metadata
+    - Flattens bookmaker→bets→values into a clean structure
+    """
+    if not result.get("success") or not result.get("data"):
+        return result
+
+    simplified = []
+    for entry in result["data"]:
+        fixture_info = entry.get("fixture", {})
+        league_info = entry.get("league", {})
+
+        odds_by_bet = {}
+        for bk in entry.get("bookmakers", []):
+            bk_name = bk.get("name", "Unknown")
+            bk_id = bk.get("id")
+            for bet in bk.get("bets", []):
+                bet_name = bet.get("name", "Unknown")
+                bet_id = bet.get("id")
+                key = f"{bet_id}:{bet_name}"
+                if key not in odds_by_bet:
+                    odds_by_bet[key] = {
+                        "bet_id": bet_id,
+                        "bet_name": bet_name,
+                        "bookmakers": [],
+                    }
+                odds_by_bet[key]["bookmakers"].append({
+                    "id": bk_id,
+                    "name": bk_name,
+                    "values": bet.get("values", []),
+                })
+
+        simplified.append({
+            "fixture_id": fixture_info.get("id"),
+            "date": fixture_info.get("date"),
+            "league": league_info.get("name"),
+            "league_id": league_info.get("id"),
+            "update": entry.get("update"),
+            "odds": list(odds_by_bet.values()),
+        })
+
+    return {
+        "success": True,
+        "results": len(simplified),
+        "data": simplified,
+        "paging": result.get("paging", {}),
+        "rate_limit_remaining": result.get("rate_limit_remaining"),
+    }
+
+
+def _simplify_live_odds(result: dict, bookmaker_name: str = "Bet365") -> dict:
+    """Flatten and simplify live odds response, filtered to one bookmaker."""
+    if not result.get("success") or not result.get("data"):
+        return result
+
+    simplified = []
+    for entry in result["data"]:
+        fixture_info = entry.get("fixture", {})
+        league_info = entry.get("league", {})
+
+        odds_list = []
+        for bk in entry.get("bookmakers", []):
+            bk_name = bk.get("name", "Unknown")
+            if bookmaker_name and bk_name != bookmaker_name:
+                continue
+            for bet in bk.get("bets", []):
+                odds_list.append({
+                    "bet_id": bet.get("id"),
+                    "bet_name": bet.get("name"),
+                    "values": bet.get("values", []),
+                })
+
+        simplified.append({
+            "fixture_id": fixture_info.get("id"),
+            "status": fixture_info.get("status", {}).get("long"),
+            "elapsed": fixture_info.get("status", {}).get("elapsed"),
+            "league": league_info.get("name"),
+            "league_id": league_info.get("id"),
+            "update": entry.get("update"),
+            "odds": odds_list,
+        })
+
+    return {
+        "success": True,
+        "results": len(simplified),
+        "data": simplified,
+        "paging": result.get("paging", {}),
+        "rate_limit_remaining": result.get("rate_limit_remaining"),
+    }
 
 
 @mcp.tool()
@@ -17,29 +116,41 @@ async def get_odds(
     date: str | None = None,
     timezone: str | None = None,
     page: int | None = None,
-    bookmaker: int | None = None,
     bet: int | None = None,
 ) -> dict:
-    """Get pre-match betting odds.
+    """Get pre-match betting odds from Bet365.
+
+    IMPORTANT: Always use 'bet' to filter by bet type to keep responses small.
+
+    Common bet type IDs:
+        1 = Match Winner, 2 = Home/Away, 3 = Second Half Winner,
+        5 = Goals Over/Under, 8 = Both Teams Score, 12 = Double Chance,
+        17 = Asian Handicap, 26 = Correct Score
 
     Args:
-        fixture: Fixture ID
+        fixture: Fixture ID (recommended — query one match at a time)
         league: League ID (requires season)
         season: Season year (requires league)
         date: Date (YYYY-MM-DD)
         timezone: Timezone
         page: Page number (results are paginated)
-        bookmaker: Bookmaker ID filter
-        bet: Bet type ID filter
+        bet: Bet type ID filter (strongly recommended)
 
-    At least one filter should be provided.
-    Returns odds from various bookmakers for different bet types.
+    Returns Bet365 odds grouped by bet type.
     """
-    return await api_request("/odds", {
+    err = require_at_least_one(
+        ["fixture", "league", "date"],
+        {"fixture": fixture, "league": league, "date": date},
+    )
+    if err:
+        return _error_response(err)
+
+    result = await api_request("/odds", {
         "fixture": fixture, "league": league, "season": season,
         "date": date, "timezone": timezone, "page": page,
-        "bookmaker": bookmaker, "bet": bet,
+        "bookmaker": 6, "bet": bet,
     })
+    return _simplify_odds(result)
 
 
 @mcp.tool()
@@ -50,16 +161,24 @@ async def get_live_odds(
 ) -> dict:
     """Get live/in-play betting odds.
 
+    IMPORTANT: Use 'bet' to filter by bet type to keep response size manageable.
+    Note: live odds API does not support bookmaker filtering, so results are
+    trimmed to Bet365 only in the response.
+
+    Common bet type IDs:
+        1 = Match Winner, 5 = Goals Over/Under, 8 = Both Teams Score
+
     Args:
         fixture: Fixture ID
         league: League ID
-        bet: Bet type ID filter
+        bet: Bet type ID filter (strongly recommended)
 
-    Returns live odds that update during matches.
+    Returns live odds from Bet365 that update during matches.
     """
-    return await api_request("/odds/live", {
+    result = await api_request("/odds/live", {
         "fixture": fixture, "league": league, "bet": bet,
     })
+    return _simplify_live_odds(result, bookmaker_name="Bet365")
 
 
 @mcp.tool()
@@ -75,22 +194,6 @@ async def get_odds_mapping(page: int | None = None) -> dict:
 
 
 @mcp.tool()
-async def get_bookmakers(
-    id: int | None = None,
-    search: str | None = None,
-) -> dict:
-    """Get available bookmakers.
-
-    Args:
-        id: Bookmaker ID
-        search: Search bookmaker by name (min 3 chars)
-
-    Returns list of bookmakers with ID and name.
-    """
-    return await api_request("/odds/bookmakers", {"id": id, "search": search})
-
-
-@mcp.tool()
 async def get_bet_types(
     id: int | None = None,
     search: str | None = None,
@@ -101,6 +204,8 @@ async def get_bet_types(
         id: Bet type ID
         search: Search bet type by name (min 3 chars)
 
-    Returns list of bet types with ID and name (e.g., 'Match Winner', 'Over/Under').
+    Returns list of bet types with ID and name.
+    Use the returned ID as the 'bet' param in get_odds/get_live_odds.
+    Common IDs: 1=Match Winner, 5=Goals Over/Under, 8=Both Teams Score, 12=Double Chance.
     """
     return await api_request("/odds/bets", {"id": id, "search": search})
