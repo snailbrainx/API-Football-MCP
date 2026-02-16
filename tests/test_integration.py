@@ -9,7 +9,7 @@ import sys
 
 import pytest
 
-sys.path.insert(0, "/home/acoloss/API-Football")
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 # Only run if API key is set and we're not in CI
 API_KEY = os.getenv("API_FOOTBALL_KEY", "")

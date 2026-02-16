@@ -1,6 +1,5 @@
 """Shared test fixtures and mock helpers."""
 
-import json
 import os
 import sys
 from unittest.mock import AsyncMock, patch
@@ -10,7 +9,7 @@ import pytest
 from dotenv import load_dotenv
 
 # Ensure project root is in path
-sys.path.insert(0, "/home/acoloss/API-Football")
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 # Load .env first so we get the real API key for integration tests
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
