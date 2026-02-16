@@ -116,7 +116,7 @@ async def get_odds(
     date: str | None = None,
     timezone: str | None = None,
     page: int | None = None,
-    bookmaker: int = 6,
+    bookmaker: int = 8,
     bet: int | None = None,
 ) -> dict:
     """Get pre-match betting odds. Defaults to Bet365 only.
@@ -135,7 +135,7 @@ async def get_odds(
         date: Date (YYYY-MM-DD)
         timezone: Timezone
         page: Page number (results are paginated)
-        bookmaker: Bookmaker ID (default: 6 = Bet365). Common: 2=888sport, 8=Betfair, 11=Betway. Use get_bookmakers to find others.
+        bookmaker: Bookmaker ID (default: 8 = Bet365). Common: 1=10Bet, 2=888sport, 6=Bwin, 11=Betway. Use get_bookmakers to find others.
         bet: Bet type ID filter (strongly recommended)
 
     Returns odds grouped by bet type from the specified bookmaker.
@@ -207,7 +207,7 @@ async def get_bookmakers(
         search: Search bookmaker by name (min 3 chars)
 
     Returns list of bookmakers with ID and name.
-    Use the returned ID as the 'bookmaker' param in get_odds (default is 6 = Bet365).
+    Use the returned ID as the 'bookmaker' param in get_odds (default is 8 = Bet365).
     """
     return await api_request("/odds/bookmakers", {"id": id, "search": search})
 

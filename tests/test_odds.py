@@ -20,7 +20,7 @@ async def test_get_odds(mock_api):
             "update": "2025-01-01T18:00:00+00:00",
             "bookmakers": [
                 {
-                    "id": 6,
+                    "id": 8,
                     "name": "Bet365",
                     "bets": [
                         {
@@ -54,7 +54,7 @@ async def test_get_odds_simplifies_response(mock_api):
             "update": "2025-01-01T18:00:00+00:00",
             "bookmakers": [
                 {
-                    "id": 6, "name": "Bet365",
+                    "id": 8, "name": "Bet365",
                     "bets": [
                         {"id": 1, "name": "Match Winner", "values": [{"value": "Home", "odd": "1.50"}]},
                         {"id": 5, "name": "Goals Over/Under", "values": [{"value": "Over 2.5", "odd": "1.80"}]},
@@ -95,7 +95,7 @@ async def test_get_odds_mapping(mock_api):
 @pytest.mark.asyncio
 async def test_get_bookmakers(mock_api):
     mock_api.return_value = mock_httpx_response(data=[
-        {"id": 6, "name": "Bet365"},
+        {"id": 8, "name": "Bet365"},
     ])
     result = await get_bookmakers()
     assert result["success"] is True
