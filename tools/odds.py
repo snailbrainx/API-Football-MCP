@@ -67,6 +67,47 @@ def _simplify_odds(result: dict) -> dict:
     }
 
 
+def _summarize_available_bets(result: dict) -> dict:
+    """When no bet filter is set, return just a list of available bet type IDs and names.
+
+    This avoids massive responses while telling the caller exactly what's available.
+    """
+    if not result.get("success") or not result.get("data"):
+        return result
+
+    summaries = []
+    for entry in result["data"]:
+        fixture_info = entry.get("fixture", {})
+        league_info = entry.get("league", {})
+
+        bet_types = {}
+        for bk in entry.get("bookmakers", []):
+            for bet in bk.get("bets", []):
+                bid = bet.get("id")
+                if bid not in bet_types:
+                    bet_types[bid] = bet.get("name", "Unknown")
+
+        summaries.append({
+            "fixture_id": fixture_info.get("id"),
+            "date": fixture_info.get("date"),
+            "league": league_info.get("name"),
+            "league_id": league_info.get("id"),
+            "available_bets": [
+                {"id": bid, "name": name}
+                for bid, name in sorted(bet_types.items())
+            ],
+            "hint": "Call get_odds again with bet=<id> to get actual odds values.",
+        })
+
+    return {
+        "success": True,
+        "results": len(summaries),
+        "data": summaries,
+        "paging": result.get("paging", {}),
+        "rate_limit_remaining": result.get("rate_limit_remaining"),
+    }
+
+
 def _simplify_live_odds(result: dict, bookmaker_name: str = "Bet365") -> dict:
     """Flatten and simplify live odds response, filtered to one bookmaker."""
     if not result.get("success") or not result.get("data"):
@@ -121,7 +162,9 @@ async def get_odds(
 ) -> dict:
     """Get pre-match betting odds. Defaults to Bet365 only.
 
-    IMPORTANT: Always use 'bet' to filter by bet type to keep responses small.
+    When 'bet' is provided: returns full odds for that bet type.
+    When 'bet' is omitted: returns a summary listing available bet types and their IDs,
+    so you can then call again with a specific bet ID.
 
     Common bet type IDs:
         1 = Match Winner, 2 = Home/Away, 3 = Second Half Winner,
@@ -136,9 +179,9 @@ async def get_odds(
         timezone: Timezone
         page: Page number (results are paginated)
         bookmaker: Bookmaker ID (default: 8 = Bet365). Common: 1=10Bet, 2=888sport, 6=Bwin, 11=Betway. Use get_bookmakers to find others.
-        bet: Bet type ID filter (strongly recommended)
+        bet: Bet type ID filter — pass this to get actual odds values
 
-    Returns odds grouped by bet type from the specified bookmaker.
+    Returns odds grouped by bet type, or a summary of available bet types if no bet filter is set.
     """
     err = require_at_least_one(
         ["fixture", "league", "date"],
@@ -152,7 +195,12 @@ async def get_odds(
         "date": date, "timezone": timezone, "page": page,
         "bookmaker": bookmaker, "bet": bet,
     })
-    return _simplify_odds(result)
+
+    if bet is not None:
+        return _simplify_odds(result)
+
+    # No bet filter — return compact summary of available bet types
+    return _summarize_available_bets(result)
 
 
 @mcp.tool()
